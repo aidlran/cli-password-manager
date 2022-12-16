@@ -26,7 +26,7 @@ A simple password storage and retrieval system using things that are probably al
    chmod +x pw-get pw-mod
    ```
 
-3. Add the directory to the `PATH` and set up aliases in your `~/.bashrc`:
+3. Add the directory to the `PATH` in your `~/.bashrc`:
 
    ```sh
    echo '# CLI Password Manager' >> ~/.bashrc
@@ -36,7 +36,7 @@ A simple password storage and retrieval system using things that are probably al
    ```
 
 > **Note**
-> Open a new terminal to enable the aliases.
+> Open a new terminal to enable the changes.
 
 ## Uninstall
 
