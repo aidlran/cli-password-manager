@@ -13,24 +13,26 @@ A simple password storage and retrieval system using things that are probably al
 > Make sure you have GnuPG (`gpg`) installed.
 
 1. Download the scripts to a local folder.
-   You could clone this repo, or use a utility like `cURL`:
+   You could clone this repo and `cd` into it, or use a utility like `cURL`:
 
    ```sh
-   curl https://raw.githubusercontent.com/aidlran/cli-password-manager/main/pw-get.sh
-   curl https://raw.githubusercontent.com/aidlran/cli-password-manager/main/pw-mod.sh
+   curl https://raw.githubusercontent.com/aidlran/cli-password-manager/main/bash/pw-get > pw-get
+   curl https://raw.githubusercontent.com/aidlran/cli-password-manager/main/bash/pw-mod > pw-mod
    ```
 
 2. Add the executable flag to the scripts:
 
    ```sh
-   chmod +x pw-get.sh pw-mod.sh
+   chmod +x pw-get pw-mod
    ```
 
-3. Append aliases to your `~/.bashrc` file:
+3. Add the directory to the `PATH` and set up aliases in your `~/.bashrc`:
 
    ```sh
-   echo "alias pw-get='$(readlink -f .)/pw-get.sh'" >> ~/.bashrc
-   echo "alias pw-mod='$(readlink -f .)/pw-mod.sh'" >> ~/.bashrc
+   echo '# CLI Password Manager' >> ~/.bashrc
+   echo '# https://github.com/aidlran/cli-password-manager' >> ~/.bashrc
+   echo "CLI_PASSWORD_MANAGER_DIR=$(readlink -f .)" >> ~/.bashrc
+   echo 'export PATH=$PATH:$CLI_PASSWORD_MANAGER_DIR/' >> ~/.bashrc
    ```
 
 > **Note**
@@ -38,9 +40,9 @@ A simple password storage and retrieval system using things that are probably al
 
 ## Uninstall
 
-Just delete the scripts (`pw-get.sh` and `pw-mod.sh`) and remove the `pw-get` and `pw-mod` aliases from your `~/.bashrc` file.
+Just delete the scripts and remove the above section from your `~/.bashrc` file.
 
-The passwords file is stored in `~/.pwmanager/`. Make sure you've backed up the data before you clear this folder!
+Your data is stored in `~/.pwmanager/`. Make sure you've backed it up before you delete it!
 
 ## Usage
 
@@ -124,12 +126,14 @@ By default, the system will use symmetric encryption which needs no configuratio
 
 1. Generate your keys with `gpg --full-generate-key`. I recommend the [GitHub docs on this](https://docs.github.com/en/authentication/managing-commit-signature-verification/generating-a-new-gpg-key) for more info.
 
-2. Manually update the `pw-mod` alias in your `~/.bashrc` to add the `--gpg-args` argument:
+2. Add a `pw-mod` alias in your `~/.bashrc` to include the `--gpg-args` argument, like so:
 
    ```bash
-   alias pw-mod='/path/to/pw-get.sh --gpg-args "-ser you@example.com"'
+   alias pw-mod='pw-mod --gpg-args "-ser you@example.com"'
    ```
 
    - `-s`: Signs the file with the key.
    - `-e`: Encrypts the file with the key.
    - `-r <id>`: Uses the desired identity. You can pass the email or name.
+
+   This will make it so that `pw-mod` will always use your key for encryption.
