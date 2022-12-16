@@ -3,8 +3,9 @@
 # Directory where stuffs are stored
 DIR=~/.pwmanager/
 
-# Create directorie if they don't exist
+# Create directories if they don't exist
 mkdir -p $DIR $DIR/backup/
+chmod 700 $DIR $DIR/backup/
 
 PW_FILE=$DIR/pw.gpg
 DO_BACKUP=1
@@ -40,8 +41,6 @@ while [[ $# -gt 0 ]]; do
 
 done
 
-# Always move the file to prevent issues
-# with GPG asking to confirm overwrite
 mv $PW_FILE $BACKUP_FILE
 
 # Pipe into and out of EDITOR
@@ -57,6 +56,8 @@ editor_pipe() {
 gpg -do - $BACKUP_FILE \
 | editor_pipe \
 | gpg --cipher-algo "$GPG_CIPHER" $GPG_ARGS -o $PW_FILE -
+
+chmod 400 $PW_FILE $BACKUP_FILE
 
 # If backups are disabled, delete
 # old version when we're done with it
