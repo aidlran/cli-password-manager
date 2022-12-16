@@ -12,14 +12,6 @@ DO_BACKUP=1
 GPG_CIPHER="aes256"
 GPG_ARGS="-c"
 
-# Create file if it doesn't exist
-if [ ! -f $PW_FILE ]; then
-  echo > $PW_FILE
-  DO_BACKUP=0
-fi
-
-BACKUP_FILE=$DIR/backup/$(date -r $PW_FILE '+%Y%m%d%H%M%S').gpg
-
 # Process arguments
 while [[ $# -gt 0 ]]; do
 
@@ -41,6 +33,14 @@ while [[ $# -gt 0 ]]; do
 
 done
 
+# Create file if it doesn't exist
+if [ ! -f $PW_FILE ]; then
+  echo | gpg $GPG_ARGS -o $PW_FILE -
+  DO_BACKUP=0
+fi
+
+BACKUP_FILE=$DIR/backup/$(date -r $PW_FILE '+%Y%m%d%H%M%S').gpg
+
 mv $PW_FILE $BACKUP_FILE
 
 # Pipe into and out of EDITOR
@@ -57,10 +57,11 @@ gpg -do - $BACKUP_FILE \
 | editor_pipe \
 | gpg --cipher-algo "$GPG_CIPHER" $GPG_ARGS -o $PW_FILE -
 
-chmod 400 $PW_FILE $BACKUP_FILE
-
+chmod 400 $PW_FILE
 # If backups are disabled, delete
 # old version when we're done with it
-if [ ! $DO_BACKUP ]; then
+if [ $DO_BACKUP -eq 0 ]; then
   rm $BACKUP_FILE
+else
+  chmod 400 $BACKUP_FILE
 fi
