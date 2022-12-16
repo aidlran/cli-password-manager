@@ -26,7 +26,7 @@ A simple password storage and retrieval system using things that are probably al
    chmod +x pw-get pw-mod
    ```
 
-3. Add the directory to the `PATH` and set up aliases in your `~/.bashrc`:
+3. Add the directory to the `PATH` in your `~/.bashrc`:
 
    ```sh
    echo '# CLI Password Manager' >> ~/.bashrc
@@ -36,7 +36,7 @@ A simple password storage and retrieval system using things that are probably al
    ```
 
 > **Note**
-> Open a new terminal to enable the aliases.
+> Open a new terminal to enable the changes.
 
 ## Uninstall
 
@@ -96,7 +96,7 @@ It will print lines that contain the term or phrase you specified.
 
 ## Configuration
 
-There's no configuration file for these scripts, but you can add arguments to the aliases in your `~/.bashrc`. See [my own dotfiles repo](https://github.com/aidlran/dotfiles/search?q=pw-get+pw-mod) for example.
+There's no configuration file for these scripts, but you can add arguments to aliases in your `~/.bashrc`. See [my own dotfiles repo](https://github.com/aidlran/dotfiles/search?q=pw-mod+filename%3A.bashrc) for example.
 
 ### GnuPG Configuration
 
