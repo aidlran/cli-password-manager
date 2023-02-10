@@ -49,7 +49,7 @@ editor_pipe() {
   cat > $TMPFILE
   $EDITOR $TMPFILE < /dev/tty > /dev/tty
   cat $TMPFILE
-  rm $TMPFILE
+  shred -u $TMPFILE
 }
 
 # Decrypt, edit in editor, re-encrypt
@@ -61,7 +61,7 @@ chmod 400 $PW_FILE
 # If backups are disabled, delete
 # old version when we're done with it
 if [ $DO_BACKUP -eq 0 ]; then
-  rm $BACKUP_FILE
+  shred -u $BACKUP_FILE
 else
   chmod 400 $BACKUP_FILE
 fi
