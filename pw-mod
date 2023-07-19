@@ -53,7 +53,7 @@ editor_pipe() {
 }
 
 # Decrypt, edit in editor, re-encrypt
-gpg -do - $BACKUP_FILE \
+gpg -do - $BACKUP_FILE 2>/dev/null \
 | editor_pipe \
 | gpg --cipher-algo "$GPG_CIPHER" $GPG_ARGS -o $PW_FILE -
 
