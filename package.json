@@ -1,0 +1,11 @@
+{
+  "name": "luna-pass-cli",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "bin": "cli.js",
+  "dependencies": {
+    "@astrobase/core": "file:lib/astrobase",
+    "commander": "^12.1.0"
+  }
+}
