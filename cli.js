@@ -20,14 +20,16 @@ process.emit = function (...args) {
 
 const { default: pkg } = await import('./package.json', { assert: { type: 'json' } });
 
+let index = null;
+
 const program = new Command(pkg.name)
   .description(pkg.description)
   .version(pkg.version, '-v, --version');
 
-program
-  .command('add <unique-id>')
-  .description('Add an entry')
-  .option('-p, --property <properties...>', 'set properties on the entry', (v, prev) => {
+const propertyOption = [
+  '-p, --property <properties...>',
+  'set properties on the entry',
+  (v, prev) => {
     const separatorIndex = v.indexOf('=');
 
     // Separator cannot be at start (0), end, or not found (-1)
@@ -38,37 +40,41 @@ program
     (prev ??= {})[v.slice(0, separatorIndex)] = v.slice(separatorIndex + 1);
 
     return prev;
-  })
-  .option('-s, --secret <secrets...>', 'secret key names to ask for', (v, prev) => {
+  },
+];
+
+const secretOption = [
+  '-s, --secret <secrets...>',
+  'secret property key names to ask for',
+  (v, prev) => {
     if (v.includes('=')) {
       console.warn('WARN: Close the terminal and shred your shell history file ASAP!');
       program.error('--secret cannot accept a value pair on the command line for security reasons');
     }
     (prev ??= []).push(v);
     return prev;
-  })
-  .action(async (id, { property, secret }) => {
-    property ??= {};
+  },
+];
 
-    if (secret) {
-      for (const key of secret) {
-        property[key] = readline.question(`${key}: `, { hideEchoBack: true });
-      }
-    }
+program
+  .command('add <unique-id>')
+  .description('Add an entry')
+  // @ts-ignore
+  .option(...propertyOption)
+  // @ts-ignore
+  .option(...secretOption)
+  .action(async (id, { property, secret }) => {
+    readSecrets((property ??= {}), secret);
 
     initAstrobase();
 
-    const index = await getIndex();
-
-    if (index[id]) {
-      program.error(`Entry '${id}' already exists`);
-    }
+    await assertEntryNotExists(id);
 
     index[id] = await putImmutable(
       await new File().setMediaType('application/json').setValue(property),
     );
 
-    await saveIndex(index);
+    await saveIndex();
   });
 
 program
@@ -77,17 +83,13 @@ program
   .action(async (id) => {
     initAstrobase();
 
-    const index = await getIndex();
-
-    if (!index[id]) {
-      program.error(`Entry '${id}' does not exist`);
-    }
+    await assertEntryExists(id);
 
     const cid = index[id];
 
     delete index[id];
 
-    await Promise.all([deleteContent(cid), saveIndex(index)]);
+    await Promise.all([deleteContent(cid), saveIndex()]);
   });
 
 program
@@ -95,22 +97,7 @@ program
   .description('Retrieve an entry')
   .action(async (id) => {
     initAstrobase();
-
-    const index = await getIndex();
-
-    if (!index[id]) {
-      program.error(`Entry '${id}' does not exist`);
-    }
-
-    const file = await getContent(index[id]);
-
-    if (!file) {
-      return program.error(`Entry '${id}' not found`);
-    }
-
-    for (const [k, v] of Object.entries(await file.getValue())) {
-      console.log(`${k}: ${v}`);
-    }
+    Object.entries(await getEntry(id)).forEach(([k, v]) => console.log(`${k}: ${v}`));
   });
 
 program
@@ -127,36 +114,95 @@ program
   .action(async (oldID, newID) => {
     initAstrobase();
 
-    const index = await getIndex();
-
-    if (!index[oldID]) {
-      program.error(`Entry '${oldID}' does not exist`);
-    }
-
-    if (index[newID]) {
-      program.error(`Entry '${newID}' already exists`);
-    }
+    await assertEntryExists(oldID);
+    await assertEntryNotExists(newID);
 
     index[newID] = index[oldID];
 
     delete index[oldID];
 
-    await saveIndex(index);
+    await saveIndex();
   });
 
-program.parse();
+program
+  .command('update <unique-id>')
+  .description('Update an existing entry')
+  // @ts-ignore
+  .option(...propertyOption)
+  // @ts-ignore
+  .option(...secretOption)
+  .action(async (id, { property, secret }) => {
+    initAstrobase();
+    const entry = await getEntry(id);
+
+    Object.assign(entry, property);
+
+    readSecrets(entry, secret);
+
+    const oldCID = index[id];
+
+    index[id] = await putImmutable(
+      await new File().setMediaType('application/json').setValue(entry),
+    );
+
+    await Promise.all([deleteContent(oldCID), saveIndex()]);
+  });
 
 function initAstrobase() {
-  const { data } = paths('luna-pass', { suffix: '' });
+  const { data } = paths(pkg.name, { suffix: '' });
   mkdirSync(data, { recursive: true });
   clients.add({ strategy: sqlite({ filename: join(data, 'astrobase.sql') }) });
 }
 
 async function getIndex() {
-  let indexFile = await getMutable('luna-pass');
-  return indexFile ? await indexFile.getValue() : {};
+  if (!index) {
+    let indexFile = await getMutable(pkg.name);
+    index = indexFile ? await indexFile.getValue() : {};
+  }
+  return index;
 }
 
-async function saveIndex(index) {
-  await putMutable('luna-pass', await new File().setMediaType('application/json').setValue(index));
+async function saveIndex() {
+  await putMutable(
+    pkg.name,
+    await new File().setMediaType('application/json').setValue(await getIndex()),
+  );
 }
+
+async function assertEntryExists(id) {
+  const index = await getIndex();
+
+  if (!index[id]) {
+    program.error(`Entry '${id}' does not exist`);
+  }
+}
+
+async function assertEntryNotExists(id) {
+  const index = await getIndex();
+
+  if (index[id]) {
+    program.error(`Entry '${id}' already exists`);
+  }
+}
+
+async function getEntry(id) {
+  await assertEntryExists(id);
+
+  const file = await getContent(index[id]);
+
+  if (!file) {
+    return program.error(`Entry '${id}' not found`);
+  }
+
+  return file.getValue();
+}
+
+function readSecrets(obj, secrets) {
+  if (secrets) {
+    for (const key of secrets) {
+      obj[key] = readline.question(`${key}: `, { hideEchoBack: true });
+    }
+  }
+}
+
+program.parse();
