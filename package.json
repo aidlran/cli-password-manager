@@ -1,11 +1,19 @@
 {
   "name": "luna-pass",
+  "description": "Secure password and secrets management CLI utility using Astrobase",
   "version": "0.0.1",
   "private": true,
   "type": "module",
   "bin": "cli.js",
+  "workspaces": [
+    "lib/astrobase"
+  ],
   "dependencies": {
     "@astrobase/core": "file:lib/astrobase",
-    "commander": "^12.1.0"
+    "commander": "12.1.0",
+    "env-paths": "3.0.0"
+  },
+  "scripts": {
+    "postinstall": "npm run build -w lib/astrobase"
   }
 }
