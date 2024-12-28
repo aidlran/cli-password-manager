@@ -11,7 +11,8 @@
   "dependencies": {
     "@astrobase/core": "file:lib/astrobase",
     "commander": "12.1.0",
-    "env-paths": "3.0.0"
+    "env-paths": "3.0.0",
+    "readline-sync": "1.4.10"
   },
   "scripts": {
     "postinstall": "npm run build -w lib/astrobase"

@@ -8,6 +8,7 @@ import { Command } from 'commander';
 import paths from 'env-paths';
 import { mkdirSync } from 'fs';
 import { join } from 'path';
+import readline from 'readline-sync';
 
 // Ignore the ExperimentalWarning from JSON import
 const defaultEmit = process.emit;
@@ -38,19 +39,20 @@ program
 
     return prev;
   })
-  .option('-s, --secret <secrets...>', 'secret key names to ask for', (v) => {
+  .option('-s, --secret <secrets...>', 'secret key names to ask for', (v, prev) => {
     if (v.includes('=')) {
       console.warn('WARN: Close the terminal and shred your shell history file ASAP!');
       program.error('--secret cannot accept a value pair on the command line for security reasons');
     }
-    return v;
+    (prev ??= []).push(v);
+    return prev;
   })
   .action(async (id, { property, secret }) => {
     property ??= {};
 
     if (secret) {
       for (const key of secret) {
-        // TODO: prompt to get secret values
+        property[key] = readline.question(`${key}: `, { hideEchoBack: true });
       }
     }
 
