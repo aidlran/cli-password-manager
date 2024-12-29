@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
 // prettier-ignore
-import { deleteContent, File, getContent, getMutable, putImmutable, putMutable } from '@astrobase/core';
+import { decodeWithCodec, deleteContent, encodeWithCodec, File, getContent, getMutable, putImmutable, putMutable } from '@astrobase/core';
 import { clients } from '@astrobase/core/rpc/client';
 import sqlite from '@astrobase/core/sqlite';
 import { Command } from 'commander';
+import { createCipheriv, createDecipheriv, pbkdf2Sync, randomBytes } from 'crypto';
 import paths from 'env-paths';
 import { mkdirSync } from 'fs';
 import { join } from 'path';
@@ -20,7 +21,8 @@ process.emit = function (...args) {
 
 const { default: pkg } = await import('./package.json', { assert: { type: 'json' } });
 
-let index = null;
+let index;
+let passphrase;
 
 const program = new Command(pkg.name)
   .description(pkg.description)
@@ -150,16 +152,13 @@ function initAstrobase() {
 async function getIndex() {
   if (!index) {
     let indexFile = await getMutable(pkg.name);
-    index = indexFile ? await indexFile.getValue() : {};
+    index = indexFile ? await decrypt(indexFile) : {};
   }
   return index;
 }
 
 async function saveIndex() {
-  await putMutable(
-    pkg.name,
-    await new File().setMediaType('application/json').setValue(await getIndex()),
-  );
+  await putMutable(pkg.name, await encrypt(await getIndex()));
 }
 
 async function assertEntryExists(id) {
@@ -187,12 +186,58 @@ async function getEntry(id) {
     return program.error(`Entry '${id}' not found`);
   }
 
-  return file.getValue();
+  return decrypt(file);
 }
 
 async function saveEntry(id, entry) {
-  index[id] = await putImmutable(await new File().setMediaType('application/json').setValue(entry));
+  index[id] = await putImmutable(await encrypt(entry));
   await saveIndex();
+}
+
+/** @param {File} file */
+function decrypt(file) {
+  if (!passphrase) {
+    passphrase = readline.question('Enter passphrase: ', { hideEchoBack: true });
+  }
+
+  const buf = file.payload;
+
+  const iv = buf.slice(0, 12);
+  const salt = buf.slice(12, 28);
+  const bufTagStart = buf.length - 16;
+  const key = pbkdf2Sync(passphrase, salt, 10000, 32, 'sha512');
+  const payload = buf.slice(28, bufTagStart);
+
+  const decipher = createDecipheriv('chacha20-poly1305', key, iv);
+  // @ts-ignore
+  decipher.setAuthTag(buf.slice(bufTagStart));
+
+  return decodeWithCodec(
+    Buffer.concat([decipher.update(payload), decipher.final()]),
+    'application/json',
+  );
+}
+
+async function encrypt(obj) {
+  if (!passphrase) {
+    passphrase = readline.question('Choose a passphrase: ', { hideEchoBack: true });
+    if (passphrase !== readline.question('Confirm passphrase: ', { hideEchoBack: true })) {
+      program.error('Passphrase does not match');
+    }
+  }
+
+  const iv = randomBytes(12);
+  const salt = randomBytes(16);
+  const key = pbkdf2Sync(passphrase, salt, 10000, 32, 'sha512');
+  const payload = await encodeWithCodec(obj, 'application/json');
+
+  const cipher = createCipheriv('chacha20-poly1305', key, iv);
+
+  // @ts-ignore
+  // prettier-ignore
+  const buf = Buffer.concat([iv, salt, cipher.update(payload), cipher.final(), cipher.getAuthTag()]);
+
+  return new File().setPayload(buf);
 }
 
 function readSecrets(obj, secrets) {
