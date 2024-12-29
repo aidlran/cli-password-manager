@@ -48,8 +48,8 @@ const secretOption = [
   'secret property key names to ask for',
   (v, prev) => {
     if (v.includes('=')) {
-      console.warn('WARN: Close the terminal and shred your shell history file ASAP!');
-      program.error('--secret cannot accept a value pair on the command line for security reasons');
+      console.warn('WARN: Secrets may have been leaked via command line input');
+      program.error('--secret cannot accept a value on the command line for security reasons');
     }
     (prev ??= []).push(v);
     return prev;
@@ -70,11 +70,7 @@ program
 
     await assertEntryNotExists(id);
 
-    index[id] = await putImmutable(
-      await new File().setMediaType('application/json').setValue(property),
-    );
-
-    await saveIndex();
+    await saveEntry(id, property);
   });
 
 program
@@ -133,6 +129,7 @@ program
   .option(...secretOption)
   .action(async (id, { property, secret }) => {
     initAstrobase();
+
     const entry = await getEntry(id);
 
     Object.assign(entry, property);
@@ -141,11 +138,7 @@ program
 
     const oldCID = index[id];
 
-    index[id] = await putImmutable(
-      await new File().setMediaType('application/json').setValue(entry),
-    );
-
-    await Promise.all([deleteContent(oldCID), saveIndex()]);
+    await Promise.all([deleteContent(oldCID), saveEntry(id, entry)]);
   });
 
 function initAstrobase() {
@@ -195,6 +188,11 @@ async function getEntry(id) {
   }
 
   return file.getValue();
+}
+
+async function saveEntry(id, entry) {
+  index[id] = await putImmutable(await new File().setMediaType('application/json').setValue(entry));
+  await saveIndex();
 }
 
 function readSecrets(obj, secrets) {
