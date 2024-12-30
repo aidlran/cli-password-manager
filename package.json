@@ -6,10 +6,10 @@
   "type": "module",
   "bin": "cli.js",
   "workspaces": [
-    "lib/astrobase"
+    "Astrobase"
   ],
   "dependencies": {
-    "@astrobase/core": "file:lib/astrobase",
+    "@astrobase/core": "file:Astrobase",
     "commander": "^13.0.0",
     "env-paths": "3.0.0",
     "readline-sync": "1.4.10"
@@ -20,6 +20,6 @@
   },
   "scripts": {
     "format": "prettier -w .",
-    "postinstall": "npm run build -w lib/astrobase"
+    "postinstall": "npm run build -w Astrobase"
   }
 }
