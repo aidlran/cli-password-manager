@@ -234,10 +234,16 @@ function decrypt(file) {
   // @ts-ignore
   decipher.setAuthTag(buf.slice(bufTagStart));
 
-  return decodeWithCodec(
-    Buffer.concat([decipher.update(payload), decipher.final()]),
-    'application/json',
-  );
+  try {
+    var decoded = Buffer.concat([decipher.update(payload), decipher.final()]);
+  } catch (e) {
+    if (e.message === 'Unsupported state or unable to authenticate data') {
+      program.error('Incorrect passphrase');
+    }
+    throw e;
+  }
+
+  return decodeWithCodec(decoded, 'application/json');
 }
 
 /** @param {object} obj */
