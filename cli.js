@@ -11,6 +11,10 @@ import { mkdirSync } from 'fs';
 import { join } from 'path';
 import readline from 'readline-sync';
 
+/** @typedef {Record<string, import('@astrobase/core').ContentIdentifier>} Index */
+
+/** @typedef {Record<string, string>} Entry */
+
 // Ignore the ExperimentalWarning from JSON import
 const defaultEmit = process.emit;
 process.emit = function (...args) {
@@ -19,9 +23,13 @@ process.emit = function (...args) {
   }
 };
 
-const { default: pkg } = await import('./package.json', { assert: { type: 'json' } });
+const { default: pkg } = await import('./package.json', {
+  assert: { type: 'json' },
+});
 
+/** @type {Index} */
 let index;
+/** @type {string} */
 let passphrase;
 
 const program = new Command(pkg.name)
@@ -152,6 +160,7 @@ function initAstrobase() {
 async function getIndex() {
   if (!index) {
     let indexFile = await getMutable(pkg.name);
+    // @ts-ignore
     index = indexFile ? await decrypt(indexFile) : {};
   }
   return index;
@@ -161,6 +170,7 @@ async function saveIndex() {
   await putMutable(pkg.name, await encrypt(await getIndex()));
 }
 
+/** @param {string} id */
 async function assertEntryExists(id) {
   const index = await getIndex();
 
@@ -169,6 +179,7 @@ async function assertEntryExists(id) {
   }
 }
 
+/** @param {string} id */
 async function assertEntryNotExists(id) {
   const index = await getIndex();
 
@@ -177,6 +188,10 @@ async function assertEntryNotExists(id) {
   }
 }
 
+/**
+ * @param {string} id
+ * @returns {Promise<Entry>}
+ */
 async function getEntry(id) {
   await assertEntryExists(id);
 
@@ -186,9 +201,14 @@ async function getEntry(id) {
     return program.error(`Entry '${id}' not found`);
   }
 
+  // @ts-ignore
   return decrypt(file);
 }
 
+/**
+ * @param {string} id
+ * @param {Entry} entry
+ */
 async function saveEntry(id, entry) {
   index[id] = await putImmutable(await encrypt(entry));
   await saveIndex();
@@ -197,7 +217,9 @@ async function saveEntry(id, entry) {
 /** @param {File} file */
 function decrypt(file) {
   if (!passphrase) {
-    passphrase = readline.question('Enter passphrase: ', { hideEchoBack: true });
+    passphrase = readline.question('Enter passphrase: ', {
+      hideEchoBack: true,
+    });
   }
 
   const buf = file.payload;
@@ -218,9 +240,12 @@ function decrypt(file) {
   );
 }
 
+/** @param {object} obj */
 async function encrypt(obj) {
   if (!passphrase) {
-    passphrase = readline.question('Choose a passphrase: ', { hideEchoBack: true });
+    passphrase = readline.question('Choose a passphrase: ', {
+      hideEchoBack: true,
+    });
     if (passphrase !== readline.question('Confirm passphrase: ', { hideEchoBack: true })) {
       program.error('Passphrase does not match');
     }
@@ -240,6 +265,10 @@ async function encrypt(obj) {
   return new File().setPayload(buf);
 }
 
+/**
+ * @param {object} obj
+ * @param {string[]} [secrets]
+ */
 function readSecrets(obj, secrets) {
   if (secrets) {
     for (const key of secrets) {
