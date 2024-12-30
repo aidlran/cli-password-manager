@@ -10,7 +10,7 @@
   ],
   "dependencies": {
     "@astrobase/core": "file:lib/astrobase",
-    "commander": "12.1.0",
+    "commander": "^13.0.0",
     "env-paths": "3.0.0",
     "readline-sync": "1.4.10"
   },
