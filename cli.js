@@ -13,7 +13,7 @@ import readline from 'readline-sync';
 
 /** @typedef {Record<string, import('@astrobase/core').ContentIdentifier>} Index */
 
-/** @typedef {Record<string, string>} Entry */
+/** @typedef {Record<string, number | string>} Entry */
 
 // Ignore the ExperimentalWarning from JSON import
 const defaultEmit = process.emit;
@@ -78,7 +78,9 @@ program
 
     initAstrobase();
 
-    await assertEntryNotExists(id);
+    await assertEntryExists(id, false);
+
+    property.added = Date.now();
 
     await saveEntry(id, property);
   });
@@ -92,7 +94,6 @@ program
     await assertEntryExists(id);
 
     const cid = index[id];
-
     delete index[id];
 
     await Promise.all([deleteContent(cid), saveIndex()]);
@@ -103,7 +104,12 @@ program
   .description('Retrieve an entry')
   .action(async (id) => {
     initAstrobase();
-    Object.entries(await getEntry(id)).forEach(([k, v]) => console.log(`${k}: ${v}`));
+    Object.entries(await getEntry(id)).forEach(([k, v]) =>
+      console.log(
+        `${k.charAt(0).toUpperCase()}${k.slice(1)}:`,
+        typeof v === 'number' ? new Date(v).toISOString() : v,
+      ),
+    );
   });
 
 program
@@ -121,10 +127,9 @@ program
     initAstrobase();
 
     await assertEntryExists(oldID);
-    await assertEntryNotExists(newID);
+    await assertEntryExists(newID, false);
 
     index[newID] = index[oldID];
-
     delete index[oldID];
 
     await saveIndex();
@@ -142,9 +147,9 @@ program
 
     const entry = await getEntry(id);
 
-    Object.assign(entry, property);
-
     readSecrets(entry, secret);
+
+    Object.assign(entry, property);
 
     const oldCID = index[id];
 
@@ -171,20 +176,9 @@ async function saveIndex() {
 }
 
 /** @param {string} id */
-async function assertEntryExists(id) {
-  const index = await getIndex();
-
-  if (!index[id]) {
-    program.error(`Entry '${id}' does not exist`);
-  }
-}
-
-/** @param {string} id */
-async function assertEntryNotExists(id) {
-  const index = await getIndex();
-
-  if (index[id]) {
-    program.error(`Entry '${id}' already exists`);
+async function assertEntryExists(id, bool = true) {
+  if (!(await getIndex())[id] == bool) {
+    program.error(`Entry '${id}' ${bool ? 'does not exist' : 'already exists'}`);
   }
 }
 
@@ -210,6 +204,7 @@ async function getEntry(id) {
  * @param {Entry} entry
  */
 async function saveEntry(id, entry) {
+  entry.updated = Date.now();
   index[id] = await putImmutable(await encrypt(entry));
   await saveIndex();
 }
