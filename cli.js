@@ -13,7 +13,11 @@ import readline from 'readline-sync';
 
 /** @typedef {Record<string, import('@astrobase/core').ContentIdentifier>} Index */
 
-/** @typedef {Record<string, number | string>} Entry */
+/**
+ * @typedef Entry
+ * @property {import('@astrobase/core').ContentIdentifier} [prev]
+ * @property {Record<string, number | string>} props
+ */
 
 // Ignore the ExperimentalWarning from JSON import
 const defaultEmit = process.emit;
@@ -82,7 +86,7 @@ program
 
     property.added = Date.now();
 
-    await saveEntry(id, property);
+    await saveEntry(id, { props: property });
   });
 
 program
@@ -93,10 +97,25 @@ program
 
     await assertEntryExists(id);
 
-    const cid = index[id];
+    let cid = index[id];
     delete index[id];
 
-    await Promise.all([deleteContent(cid), saveIndex()]);
+    const promises = [saveIndex()];
+
+    while (cid) {
+      const file = await getContent(cid);
+
+      if (!file) {
+        break;
+      }
+
+      promises.push(deleteContent(cid));
+
+      // @ts-ignore
+      cid = (await decrypt(file)).prev;
+    }
+
+    await Promise.all(promises);
   });
 
 program
@@ -104,7 +123,7 @@ program
   .description('Retrieve an entry')
   .action(async (id) => {
     initAstrobase();
-    Object.entries(await getEntry(id)).forEach(([k, v]) =>
+    Object.entries(await getEntryProps(id)).forEach(([k, v]) =>
       console.log(
         `${k.charAt(0).toUpperCase()}${k.slice(1)}:`,
         typeof v === 'number' ? new Date(v).toISOString() : v,
@@ -145,15 +164,13 @@ program
   .action(async (id, { property, secret }) => {
     initAstrobase();
 
-    const entry = await getEntry(id);
+    const props = await getEntryProps(id);
 
-    promptSecrets(entry, secret);
+    promptSecrets(props, secret);
 
-    Object.assign(entry, property);
+    Object.assign(props, property);
 
-    const oldCID = index[id];
-
-    await Promise.all([deleteContent(oldCID), saveEntry(id, entry)]);
+    await saveEntry(id, { prev: index[id], props });
   });
 
 const prompt = (prompt) => readline.question(`${prompt}: `, { hideEchoBack: true });
@@ -186,9 +203,9 @@ async function assertEntryExists(id, bool = true) {
 
 /**
  * @param {string} id
- * @returns {Promise<Entry>}
+ * @returns {Promise<Entry['props']>}
  */
-async function getEntry(id) {
+async function getEntryProps(id) {
   await assertEntryExists(id);
 
   const file = await getContent(index[id]);
@@ -198,7 +215,7 @@ async function getEntry(id) {
   }
 
   // @ts-ignore
-  return decrypt(file);
+  return (await decrypt(file)).props;
 }
 
 /**
@@ -206,7 +223,7 @@ async function getEntry(id) {
  * @param {Entry} entry
  */
 async function saveEntry(id, entry) {
-  entry.updated = Date.now();
+  entry.props.updated = Date.now();
   index[id] = await putImmutable(await encrypt(entry));
   await saveIndex();
 }
