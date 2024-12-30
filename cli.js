@@ -74,7 +74,7 @@ program
   // @ts-ignore
   .option(...secretOption)
   .action(async (id, { property, secret }) => {
-    readSecrets((property ??= {}), secret);
+    promptSecrets((property ??= {}), secret);
 
     initAstrobase();
 
@@ -147,7 +147,7 @@ program
 
     const entry = await getEntry(id);
 
-    readSecrets(entry, secret);
+    promptSecrets(entry, secret);
 
     Object.assign(entry, property);
 
@@ -155,6 +155,8 @@ program
 
     await Promise.all([deleteContent(oldCID), saveEntry(id, entry)]);
   });
+
+const prompt = (prompt) => readline.question(`${prompt}: `, { hideEchoBack: true });
 
 function initAstrobase() {
   const { data } = paths(pkg.name, { suffix: '' });
@@ -211,18 +213,12 @@ async function saveEntry(id, entry) {
 
 /** @param {File} file */
 function decrypt(file) {
-  if (!passphrase) {
-    passphrase = readline.question('Enter passphrase: ', {
-      hideEchoBack: true,
-    });
-  }
-
   const buf = file.payload;
 
   const iv = buf.slice(0, 12);
   const salt = buf.slice(12, 28);
   const bufTagStart = buf.length - 16;
-  const key = pbkdf2Sync(passphrase, salt, 10000, 32, 'sha512');
+  const key = pbkdf2Sync((passphrase ??= prompt('Enter passphrase')), salt, 10000, 32, 'sha512');
   const payload = buf.slice(28, bufTagStart);
 
   const decipher = createDecipheriv('chacha20-poly1305', key, iv);
@@ -243,13 +239,11 @@ function decrypt(file) {
 
 /** @param {object} obj */
 async function encrypt(obj) {
-  if (!passphrase) {
-    passphrase = readline.question('Choose a passphrase: ', {
-      hideEchoBack: true,
-    });
-    if (passphrase !== readline.question('Confirm passphrase: ', { hideEchoBack: true })) {
-      program.error('Passphrase does not match');
-    }
+  if (
+    !passphrase &&
+    (passphrase = prompt('Choose a passphrase')) !== prompt('Confirm passphrase')
+  ) {
+    program.error('Passphrase did not match');
   }
 
   const iv = randomBytes(12);
@@ -270,10 +264,10 @@ async function encrypt(obj) {
  * @param {object} obj
  * @param {string[]} [secrets]
  */
-function readSecrets(obj, secrets) {
+function promptSecrets(obj, secrets) {
   if (secrets) {
     for (const key of secrets) {
-      obj[key] = readline.question(`${key}: `, { hideEchoBack: true });
+      obj[key] = prompt(key);
     }
   }
 }
