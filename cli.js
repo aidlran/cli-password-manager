@@ -11,7 +11,13 @@ import { mkdirSync } from 'fs';
 import { join } from 'path';
 import readline from 'readline-sync';
 
-/** @typedef {Record<string, import('@astrobase/core').ContentIdentifier>} Index */
+/** @typedef {Record<string, IndexValue>} Index */
+
+/**
+ * @typedef IndexValue
+ * @property {string} added
+ * @property {import('@astrobase/core').ContentIdentifier} cid
+ */
 
 /**
  * @typedef Entry
@@ -51,7 +57,14 @@ const propertyOption = [
       program.error('--property expects a key value pair, e.g. `--property key=value`');
     }
 
-    (prev ??= {})[v.slice(0, separatorIndex)] = v.slice(separatorIndex + 1);
+    const key = v.slice(0, separatorIndex);
+    const value = v.slice(separatorIndex + 1);
+
+    if ((key === 'added' || key === 'updated') && isNaN(Date.parse(value))) {
+      program.error(`Property '${key}' must use date format`);
+    }
+
+    (prev ??= {})[key] = value;
 
     return prev;
   },
@@ -64,6 +77,9 @@ const secretOption = [
     if (v.includes('=')) {
       console.warn('WARN: Secrets may have been leaked via command line input');
       program.error('--secret cannot accept a value on the command line for security reasons');
+    }
+    if (v === 'added' || v === 'updated') {
+      program.error(`Cannot use --secret for property '${v}'. Use --property instead.`);
     }
     (prev ??= []).push(v);
     return prev;
@@ -84,8 +100,6 @@ program
 
     await assertEntryExists(id, false);
 
-    property.added = now;
-
     await saveEntry(id, { props: property });
   });
 
@@ -97,7 +111,7 @@ program
 
     await assertEntryExists(id);
 
-    let cid = index[id];
+    let cid = index[id].cid;
     delete index[id];
 
     const promises = [saveIndex()];
@@ -126,6 +140,7 @@ program
     Object.entries(await getEntryProps(id)).forEach(([k, v]) =>
       console.log(`${k.charAt(0).toUpperCase()}${k.slice(1)}:`, v),
     );
+    console.log('Added:', index[id].added);
   });
 
 program
@@ -165,9 +180,11 @@ program
 
     promptSecrets(props, secret);
 
+    (property ??= {}).updated ??= now;
+
     Object.assign(props, property);
 
-    await saveEntry(id, { prev: index[id], props });
+    await saveEntry(id, { prev: index[id]?.cid, props });
   });
 
 const now = new Date().toISOString();
@@ -207,7 +224,7 @@ async function assertEntryExists(id, bool = true) {
 async function getEntryProps(id) {
   await assertEntryExists(id);
 
-  const file = await getContent(index[id]);
+  const file = await getContent(index[id].cid);
 
   if (!file) {
     return program.error(`Entry '${id}' not found`);
@@ -222,8 +239,10 @@ async function getEntryProps(id) {
  * @param {Entry} entry
  */
 async function saveEntry(id, entry) {
-  entry.props.updated = now;
-  index[id] = await putImmutable(await encrypt(entry));
+  entry.props.updated ??= now;
+  const added = entry.props.added ?? index[id]?.added ?? now;
+  delete entry.props.added;
+  index[id] = { added, cid: await putImmutable(await encrypt(entry)) };
   await saveIndex();
 }
 
@@ -234,7 +253,13 @@ function decrypt(file) {
   const iv = buf.slice(0, 12);
   const salt = buf.slice(12, 28);
   const bufTagStart = buf.length - 16;
-  const key = pbkdf2Sync((passphrase ??= prompt('Enter passphrase')), salt, 10000, 32, 'sha512');
+  const key = pbkdf2Sync(
+    (passphrase ??= prompt('Enter database passphrase')),
+    salt,
+    10000,
+    32,
+    'sha512',
+  );
   const payload = buf.slice(28, bufTagStart);
 
   const decipher = createDecipheriv('chacha20-poly1305', key, iv);
@@ -245,7 +270,7 @@ function decrypt(file) {
     var decoded = Buffer.concat([decipher.update(payload), decipher.final()]);
   } catch (e) {
     if (e.message === 'Unsupported state or unable to authenticate data') {
-      program.error('Incorrect passphrase');
+      program.error('Incorrect database passphrase');
     }
     throw e;
   }
@@ -257,9 +282,9 @@ function decrypt(file) {
 async function encrypt(obj) {
   if (
     !passphrase &&
-    (passphrase = prompt('Choose a passphrase')) !== prompt('Confirm passphrase')
+    (passphrase = prompt('Choose a database passphrase')) !== prompt('Confirm database passphrase')
   ) {
-    program.error('Passphrase did not match');
+    program.error('Database passphrase did not match');
   }
 
   const iv = randomBytes(12);
@@ -283,7 +308,7 @@ async function encrypt(obj) {
 function promptSecrets(obj, secrets) {
   if (secrets) {
     for (const key of secrets) {
-      obj[key] = prompt(key);
+      obj[key] = prompt(`Enter value for '${key}'`);
     }
   }
 }
