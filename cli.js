@@ -16,7 +16,7 @@ import readline from 'readline-sync';
 /**
  * @typedef Entry
  * @property {import('@astrobase/core').ContentIdentifier} [prev]
- * @property {Record<string, number | string>} props
+ * @property {Record<string, string>} props
  */
 
 // Ignore the ExperimentalWarning from JSON import
@@ -84,7 +84,7 @@ program
 
     await assertEntryExists(id, false);
 
-    property.added = Date.now();
+    property.added = now;
 
     await saveEntry(id, { props: property });
   });
@@ -124,10 +124,7 @@ program
   .action(async (id) => {
     initAstrobase();
     Object.entries(await getEntryProps(id)).forEach(([k, v]) =>
-      console.log(
-        `${k.charAt(0).toUpperCase()}${k.slice(1)}:`,
-        typeof v === 'number' ? new Date(v).toISOString() : v,
-      ),
+      console.log(`${k.charAt(0).toUpperCase()}${k.slice(1)}:`, v),
     );
   });
 
@@ -172,6 +169,8 @@ program
 
     await saveEntry(id, { prev: index[id], props });
   });
+
+const now = new Date().toISOString();
 
 const prompt = (prompt) => readline.question(`${prompt}: `, { hideEchoBack: true });
 
@@ -223,7 +222,7 @@ async function getEntryProps(id) {
  * @param {Entry} entry
  */
 async function saveEntry(id, entry) {
-  entry.props.updated = Date.now();
+  entry.props.updated = now;
   index[id] = await putImmutable(await encrypt(entry));
   await saveIndex();
 }
