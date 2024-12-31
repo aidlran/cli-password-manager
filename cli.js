@@ -173,10 +173,15 @@ program
   .option(...propertyOption)
   // @ts-ignore
   .option(...secretOption)
-  .action(async (id, { property, secret }) => {
+  .option('-d, --delete <keys-to-delete...>', 'specify keys to delete')
+  .action(async (id, { delete: keysToDelete, property, secret }) => {
     initAstrobase();
 
     const props = await getEntryProps(id);
+
+    for (const key of keysToDelete) {
+      delete props[key];
+    }
 
     promptSecrets(props, secret);
 
