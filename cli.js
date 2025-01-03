@@ -179,8 +179,10 @@ program
 
     const props = await getEntryProps(id);
 
-    for (const key of keysToDelete) {
-      delete props[key];
+    if (keysToDelete) {
+      for (const key of keysToDelete) {
+        delete props[key];
+      }
     }
 
     promptSecrets(props, secret);
