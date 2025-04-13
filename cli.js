@@ -25,16 +25,8 @@ import readline from 'readline-sync';
  * @property {Record<string, string>} props
  */
 
-// Ignore the ExperimentalWarning from JSON import
-const defaultEmit = process.emit;
-process.emit = function (...args) {
-  if (args[1].name !== 'ExperimentalWarning') {
-    return defaultEmit.call(this, ...args);
-  }
-};
-
 const { default: pkg } = await import('./package.json', {
-  assert: { type: 'json' },
+  with: { type: 'json' },
 });
 
 /** @type {Index} */
@@ -144,11 +136,17 @@ program
   });
 
 program
-  .command('list')
+  .command('list [search]')
   .description('List entries')
-  .action(async () => {
+  .action(async (search) => {
     initAstrobase();
-    Object.keys(await getIndex()).forEach((k) => console.log(k));
+    const keys = Object.keys(await getIndex());
+    if (search) {
+      search = search.trim().toLowerCase();
+    }
+    (search ? keys.filter((string) => string.toLowerCase().includes(search)) : keys)
+      .sort((a, b) => a.localeCompare(b))
+      .forEach((k) => console.log(k));
   });
 
 program
