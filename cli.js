@@ -7,7 +7,7 @@ import sqlite from '@astrobase/core/sqlite';
 import { Command } from 'commander';
 import { createCipheriv, createDecipheriv, pbkdf2Sync, randomBytes } from 'crypto';
 import paths from 'env-paths';
-import { mkdirSync } from 'fs';
+import { existsSync, mkdirSync, renameSync } from 'fs';
 import { join } from 'path';
 import readline from 'readline-sync';
 import pkg from './package.json' with { type: 'json' };
@@ -34,10 +34,17 @@ let passphrase;
 const { data: dataDir } = paths(pkg.name, { suffix: '' });
 mkdirSync(dataDir, { recursive: true });
 
+const oldDbFilePath = join(dataDir, 'astrobase.sql');
+const defaultDbFilePath = join(dataDir, 'luna-pass.db');
+
+if (!existsSync(defaultDbFilePath) && existsSync(oldDbFilePath)) {
+  renameSync(oldDbFilePath, defaultDbFilePath);
+}
+
 const program = new Command(pkg.name)
   .description(pkg.description)
   .version(pkg.version, '-v, --version')
-  .option('--db <db-file>', 'path to db file', join(dataDir, 'astrobase.sql'));
+  .option('--db <db-file>', 'path to db file', defaultDbFilePath);
 
 const propertyOption = [
   '-p, --property <properties...>',
