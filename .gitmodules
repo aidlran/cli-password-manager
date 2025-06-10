@@ -1,3 +1,6 @@
 [submodule "Astrobase"]
 	path = Astrobase
 	url = https://github.com/AstrobaseTech/Astrobase.git
+[submodule "Astrobase-old"]
+	path = Astrobase-old
+	url = https://github.com/AstrobaseTech/Astrobase.git

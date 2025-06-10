@@ -10,6 +10,7 @@ import paths from 'env-paths';
 import { mkdirSync } from 'fs';
 import { join } from 'path';
 import readline from 'readline-sync';
+import pkg from './package.json' with { type: 'json' };
 
 /** @typedef {Record<string, IndexValue>} Index */
 
@@ -25,18 +26,18 @@ import readline from 'readline-sync';
  * @property {Record<string, string>} props
  */
 
-const { default: pkg } = await import('./package.json', {
-  with: { type: 'json' },
-});
-
 /** @type {Index} */
 let index;
 /** @type {string} */
 let passphrase;
 
+const { data: dataDir } = paths(pkg.name, { suffix: '' });
+mkdirSync(dataDir, { recursive: true });
+
 const program = new Command(pkg.name)
   .description(pkg.description)
-  .version(pkg.version, '-v, --version');
+  .version(pkg.version, '-v, --version')
+  .option('--db <db-file>', 'path to db file', join(dataDir, 'astrobase.sql'));
 
 const propertyOption = [
   '-p, --property <properties...>',
@@ -199,7 +200,7 @@ const prompt = (prompt) => readline.question(`${prompt}: `, { hideEchoBack: true
 function initAstrobase() {
   const { data } = paths(pkg.name, { suffix: '' });
   mkdirSync(data, { recursive: true });
-  clients.add({ strategy: sqlite({ filename: join(data, 'astrobase.sql') }) });
+  clients.add({ strategy: sqlite({ filename: program.getOptionValue('db') }) });
 }
 
 async function getIndex() {
