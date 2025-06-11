@@ -4,5 +4,5 @@
     "checkJs": true,
     "resolveJsonModule": true
   },
-  "files": ["cli.js"]
+  "files": ["src/cli.js"]
 }

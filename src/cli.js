@@ -1,16 +1,20 @@
 #!/usr/bin/env node
 
-// prettier-ignore
-import { decodeWithCodec, deleteContent, encodeWithCodec, File, getContent, getMutable, putImmutable, putMutable } from '@astrobase/core';
+import { deleteContent, getContent, getMutable, putImmutable, putMutable } from '@astrobase/core';
 import { clients } from '@astrobase/core/rpc/client';
-import sqlite from '@astrobase/core/sqlite';
+import legacySqlite from '@astrobase/core/sqlite';
+
+import { Common } from '@astrobase/sdk/common';
+import { createInstance } from '@astrobase/sdk/instance';
+import sqlite from '@astrobase/sdk/sqlite';
+
 import { Command } from 'commander';
-import { createCipheriv, createDecipheriv, pbkdf2Sync, randomBytes } from 'crypto';
 import paths from 'env-paths';
 import { existsSync, mkdirSync, renameSync } from 'fs';
 import { join } from 'path';
-import readline from 'readline-sync';
-import pkg from './package.json' with { type: 'json' };
+import { question } from 'readline-sync';
+import pkg from '../package.json' with { type: 'json' };
+import { decrypt, encrypt } from './lib.js';
 
 /** @typedef {Record<string, IndexValue>} Index */
 
@@ -126,7 +130,7 @@ program
       promises.push(deleteContent(cid));
 
       // @ts-ignore
-      cid = (await decrypt(file)).prev;
+      cid = (await programDecrypt(file)).prev;
     }
 
     await Promise.all(promises);
@@ -202,25 +206,31 @@ program
 
 const now = new Date().toISOString();
 
-const prompt = (prompt) => readline.question(`${prompt}: `, { hideEchoBack: true });
+const prompt = (/** @type {string} */ prompt) => question(`${prompt}: `, { hideEchoBack: true });
 
 function initAstrobase() {
   const { data } = paths(pkg.name, { suffix: '' });
   mkdirSync(data, { recursive: true });
-  clients.add({ strategy: sqlite({ filename: program.getOptionValue('db') }) });
+
+  const sqliteConfig = { filename: program.getOptionValue('db') };
+
+  /** @deprecated * */
+  clients.add({ strategy: legacySqlite(sqliteConfig) });
+
+  return createInstance(Common, { clients: [{ strategy: sqlite(sqliteConfig) }] });
 }
 
 async function getIndex() {
   if (!index) {
     let indexFile = await getMutable(pkg.name);
     // @ts-ignore
-    index = indexFile ? await decrypt(indexFile) : {};
+    index = indexFile ? await programDecrypt(indexFile) : {};
   }
   return index;
 }
 
 async function saveIndex() {
-  await putMutable(pkg.name, await encrypt(await getIndex()));
+  await putMutable(pkg.name, await programEncrypt(await getIndex()));
 }
 
 /** @param {string} id */
@@ -244,7 +254,7 @@ async function getEntryProps(id) {
   }
 
   // @ts-ignore
-  return (await decrypt(file)).props;
+  return (await programDecrypt(file)).props;
 }
 
 /**
@@ -255,44 +265,22 @@ async function saveEntry(id, entry) {
   entry.props.updated ??= now;
   const added = entry.props.added ?? index[id]?.added ?? now;
   delete entry.props.added;
-  index[id] = { added, cid: await putImmutable(await encrypt(entry)) };
+  index[id] = { added, cid: await putImmutable(await programEncrypt(entry)) };
   await saveIndex();
 }
 
-/** @param {File} file */
-function decrypt(file) {
-  const buf = file.payload;
-
-  const iv = buf.slice(0, 12);
-  const salt = buf.slice(12, 28);
-  const bufTagStart = buf.length - 16;
-  const key = pbkdf2Sync(
-    (passphrase ??= prompt('Enter database passphrase')),
-    salt,
-    10000,
-    32,
-    'sha512',
-  );
-  const payload = buf.slice(28, bufTagStart);
-
-  const decipher = createDecipheriv('chacha20-poly1305', key, iv);
-  // @ts-ignore
-  decipher.setAuthTag(buf.slice(bufTagStart));
-
+async function programDecrypt(/** @type {import('@astrobase/core').File} */ file) {
   try {
-    var decoded = Buffer.concat([decipher.update(payload), decipher.final()]);
+    return await decrypt(file, (passphrase ??= prompt('Enter database passphrase')));
   } catch (e) {
     if (e.message === 'Unsupported state or unable to authenticate data') {
       program.error('Incorrect database passphrase');
     }
     throw e;
   }
-
-  return decodeWithCodec(decoded, 'application/json');
 }
 
-/** @param {object} obj */
-async function encrypt(obj) {
+function programEncrypt(/** @type {object} */ obj) {
   if (
     !passphrase &&
     (passphrase = prompt('Choose a database passphrase')) !== prompt('Confirm database passphrase')
@@ -300,18 +288,7 @@ async function encrypt(obj) {
     program.error('Database passphrase did not match');
   }
 
-  const iv = randomBytes(12);
-  const salt = randomBytes(16);
-  const key = pbkdf2Sync(passphrase, salt, 10000, 32, 'sha512');
-  const payload = await encodeWithCodec(obj, 'application/json');
-
-  const cipher = createCipheriv('chacha20-poly1305', key, iv);
-
-  // @ts-ignore
-  // prettier-ignore
-  const buf = Buffer.concat([iv, salt, cipher.update(payload), cipher.final(), cipher.getAuthTag()]);
-
-  return new File().setPayload(buf);
+  return encrypt(obj, passphrase);
 }
 
 /**
