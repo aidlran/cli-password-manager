@@ -4,7 +4,7 @@
   "version": "2.0.0-rc.7",
   "private": true,
   "type": "module",
-  "bin": "src/cli.js",
+  "bin": "src/cli.mjs",
   "workspaces": [
     "Astrobase",
     "Astrobase-old"
