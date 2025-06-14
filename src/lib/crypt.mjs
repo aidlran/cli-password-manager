@@ -1,31 +1,31 @@
-import { decodeWithCodec, encodeWithCodec } from '@astrobase/sdk/codecs';
+import { encodeWithCodec } from '@astrobase/sdk/codecs';
 import { Common } from '@astrobase/sdk/common';
 import { createInstance } from '@astrobase/sdk/instance';
 import { createCipheriv, createDecipheriv, pbkdf2Sync, randomBytes } from 'crypto';
-import { question } from 'readline-sync';
 
 const commonInstance = createInstance(Common);
-
-export const prompt = (/** @type {string} */ prompt) =>
-  question(`${prompt}: `, { hideEchoBack: true });
 
 export function decrypt(
   /** @type {Uint8Array} */ buf,
   /** @type {import('crypto').BinaryLike} */ passphrase,
+  /** @type {() => unknown} */ onIncorrectPassphrase,
   /** @type {import('@astrobase/sdk/instance').Instance} */ instance = commonInstance,
 ) {
-  const iv = buf.slice(0, 12);
-  const salt = buf.slice(12, 28);
-  const bufTagStart = buf.length - 16;
-  const key = pbkdf2Sync(passphrase, salt, 10000, 32, 'sha512');
-  const payload = buf.slice(28, bufTagStart);
-
-  const decipher = createDecipheriv('chacha20-poly1305', key, iv);
-  decipher.setAuthTag(buf.slice(bufTagStart));
-
-  const decoded = Buffer.concat([decipher.update(payload), decipher.final()]);
-
-  return decodeWithCodec(instance, decoded, 'application/json');
+  try {
+    const iv = buf.slice(0, 12);
+    const salt = buf.slice(12, 28);
+    const bufTagStart = buf.length - 16;
+    const key = pbkdf2Sync(passphrase, salt, 10000, 32, 'sha512');
+    const payload = buf.slice(28, bufTagStart);
+    const decipher = createDecipheriv('chacha20-poly1305', key, iv);
+    decipher.setAuthTag(buf.slice(bufTagStart));
+    return Buffer.concat([decipher.update(payload), decipher.final()]);
+  } catch (e) {
+    if (e.message === 'Unsupported state or unable to authenticate data') {
+      onIncorrectPassphrase();
+    }
+    throw e;
+  }
 }
 
 export async function encrypt(
@@ -37,11 +37,6 @@ export async function encrypt(
   const salt = randomBytes(16);
   const key = pbkdf2Sync(passphrase, salt, 10000, 32, 'sha512');
   const payload = await encodeWithCodec(instance, obj, 'application/json');
-
   const cipher = createCipheriv('chacha20-poly1305', key, iv);
-
-  // prettier-ignore
-  const buf = Buffer.concat([iv, salt, cipher.update(payload), cipher.final(), cipher.getAuthTag()]);
-
-  return buf;
+  return Buffer.concat([iv, salt, cipher.update(payload), cipher.final(), cipher.getAuthTag()]);
 }

@@ -1,24 +1,17 @@
 #!/usr/bin/env node
 
 // prettier-ignore
-import { deleteContent, File, getContent, getMutable, putImmutable, putMutable } from '@astrobase/core';
+import { decodeWithCodec, deleteContent, File, getContent, putImmutable, putMutable } from '@astrobase/core';
 import { clients } from '@astrobase/core/rpc/client';
 import sqlite from '@astrobase/core/sqlite';
-
 import { Command } from 'commander';
 import paths from 'env-paths';
 import { existsSync, mkdirSync, renameSync } from 'fs';
 import { join } from 'path';
 import pkg from '../package.json' with { type: 'json' };
-import { decrypt, encrypt, prompt } from './lib.js';
-
-/** @typedef {Record<string, IndexValue>} Index */
-
-/**
- * @typedef IndexValue
- * @property {string} added
- * @property {import('@astrobase/core').ContentIdentifier} cid
- */
+import { decrypt, encrypt } from './lib/crypt.mjs';
+import { getIndex } from './lib/legacy/index-file.mjs';
+import { prompt } from './lib/readline.mjs';
 
 /**
  * @typedef Entry
@@ -26,7 +19,7 @@ import { decrypt, encrypt, prompt } from './lib.js';
  * @property {Record<string, string>} props
  */
 
-/** @type {Index} */
+/** @type {import('./lib/legacy/index-file.mjs').Index} */
 let index;
 /** @type {string} */
 let passphrase;
@@ -148,7 +141,7 @@ program
   .description('List entries')
   .action(async (search) => {
     initAstrobase();
-    const keys = Object.keys(await getIndex());
+    const keys = Object.keys(await programGetIndex());
     if (search) {
       search = search.trim().toLowerCase();
     }
@@ -208,22 +201,18 @@ function initAstrobase() {
   clients.add({ strategy: sqlite({ filename: program.getOptionValue('db') }) });
 }
 
-async function getIndex() {
-  if (!index) {
-    let indexFile = await getMutable(pkg.name);
-    // @ts-ignore
-    index = indexFile ? await programDecrypt(indexFile) : {};
-  }
-  return index;
-}
+const programGetIndex = async () =>
+  (index ??= await getIndex((passphrase ??= prompt('Enter database passphrase')), () =>
+    program.error('Incorrect database passphrase'),
+  ));
 
 async function saveIndex() {
-  await putMutable(pkg.name, await programEncrypt(await getIndex()));
+  await putMutable(pkg.name, await programEncrypt(await programGetIndex()));
 }
 
 /** @param {string} id */
 async function assertEntryExists(id, bool = true) {
-  if (!(await getIndex())[id] == bool) {
+  if (!(await programGetIndex())[id] == bool) {
     program.error(`Entry '${id}' ${bool ? 'does not exist' : 'already exists'}`);
   }
 }
@@ -257,16 +246,13 @@ async function saveEntry(id, entry) {
   await saveIndex();
 }
 
-async function programDecrypt(/** @type {import('@astrobase/core').File} */ file) {
-  try {
-    return await decrypt(file.payload, (passphrase ??= prompt('Enter database passphrase')));
-  } catch (e) {
-    if (e.message === 'Unsupported state or unable to authenticate data') {
-      program.error('Incorrect database passphrase');
-    }
-    throw e;
-  }
-}
+const programDecrypt = (/** @type {import('@astrobase/core').File} */ file) =>
+  decodeWithCodec(
+    decrypt(file.payload, (passphrase ??= prompt('Enter database passphrase')), () =>
+      program.error('Incorrect database passphrase'),
+    ),
+    'application/json',
+  );
 
 async function programEncrypt(/** @type {object} */ obj) {
   if (
