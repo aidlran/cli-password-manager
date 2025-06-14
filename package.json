@@ -23,6 +23,7 @@
   },
   "scripts": {
     "build": "npm run build -w Astrobase && npm run build -w Astrobase-old",
-    "format": "prettier -w ."
+    "format": "prettier -w .",
+    "test": "vitest run"
   }
 }

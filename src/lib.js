@@ -1,9 +1,19 @@
-import { decodeWithCodec, encodeWithCodec, File } from '@astrobase/core';
+import { decodeWithCodec, encodeWithCodec } from '@astrobase/sdk/codecs';
+import { Common } from '@astrobase/sdk/common';
+import { createInstance } from '@astrobase/sdk/instance';
 import { createCipheriv, createDecipheriv, pbkdf2Sync, randomBytes } from 'crypto';
+import { question } from 'readline-sync';
 
-export function decrypt(/** @type {File} */ file, /** @type {string} */ passphrase) {
-  const buf = file.payload;
+const commonInstance = createInstance(Common);
 
+export const prompt = (/** @type {string} */ prompt) =>
+  question(`${prompt}: `, { hideEchoBack: true });
+
+export function decrypt(
+  /** @type {Uint8Array} */ buf,
+  /** @type {import('crypto').BinaryLike} */ passphrase,
+  /** @type {import('@astrobase/sdk/instance').Instance} */ instance = commonInstance,
+) {
   const iv = buf.slice(0, 12);
   const salt = buf.slice(12, 28);
   const bufTagStart = buf.length - 16;
@@ -15,19 +25,23 @@ export function decrypt(/** @type {File} */ file, /** @type {string} */ passphra
 
   const decoded = Buffer.concat([decipher.update(payload), decipher.final()]);
 
-  return decodeWithCodec(decoded, 'application/json');
+  return decodeWithCodec(instance, decoded, 'application/json');
 }
 
-export async function encrypt(/** @type {object} */ obj, /** @type {string} */ passphrase) {
+export async function encrypt(
+  /** @type {object} */ obj,
+  /** @type {import('crypto').BinaryLike} */ passphrase,
+  /** @type {import('@astrobase/sdk/instance').Instance} */ instance = commonInstance,
+) {
   const iv = randomBytes(12);
   const salt = randomBytes(16);
   const key = pbkdf2Sync(passphrase, salt, 10000, 32, 'sha512');
-  const payload = await encodeWithCodec(obj, 'application/json');
+  const payload = await encodeWithCodec(instance, obj, 'application/json');
 
   const cipher = createCipheriv('chacha20-poly1305', key, iv);
 
   // prettier-ignore
   const buf = Buffer.concat([iv, salt, cipher.update(payload), cipher.final(), cipher.getAuthTag()]);
 
-  return new File().setPayload(buf);
+  return buf;
 }

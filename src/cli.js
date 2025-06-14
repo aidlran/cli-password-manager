@@ -1,20 +1,16 @@
 #!/usr/bin/env node
 
-import { deleteContent, getContent, getMutable, putImmutable, putMutable } from '@astrobase/core';
+// prettier-ignore
+import { deleteContent, File, getContent, getMutable, putImmutable, putMutable } from '@astrobase/core';
 import { clients } from '@astrobase/core/rpc/client';
-import legacySqlite from '@astrobase/core/sqlite';
-
-import { Common } from '@astrobase/sdk/common';
-import { createInstance } from '@astrobase/sdk/instance';
-import sqlite from '@astrobase/sdk/sqlite';
+import sqlite from '@astrobase/core/sqlite';
 
 import { Command } from 'commander';
 import paths from 'env-paths';
 import { existsSync, mkdirSync, renameSync } from 'fs';
 import { join } from 'path';
-import { question } from 'readline-sync';
 import pkg from '../package.json' with { type: 'json' };
-import { decrypt, encrypt } from './lib.js';
+import { decrypt, encrypt, prompt } from './lib.js';
 
 /** @typedef {Record<string, IndexValue>} Index */
 
@@ -206,18 +202,10 @@ program
 
 const now = new Date().toISOString();
 
-const prompt = (/** @type {string} */ prompt) => question(`${prompt}: `, { hideEchoBack: true });
-
 function initAstrobase() {
   const { data } = paths(pkg.name, { suffix: '' });
   mkdirSync(data, { recursive: true });
-
-  const sqliteConfig = { filename: program.getOptionValue('db') };
-
-  /** @deprecated * */
-  clients.add({ strategy: legacySqlite(sqliteConfig) });
-
-  return createInstance(Common, { clients: [{ strategy: sqlite(sqliteConfig) }] });
+  clients.add({ strategy: sqlite({ filename: program.getOptionValue('db') }) });
 }
 
 async function getIndex() {
@@ -271,7 +259,7 @@ async function saveEntry(id, entry) {
 
 async function programDecrypt(/** @type {import('@astrobase/core').File} */ file) {
   try {
-    return await decrypt(file, (passphrase ??= prompt('Enter database passphrase')));
+    return await decrypt(file.payload, (passphrase ??= prompt('Enter database passphrase')));
   } catch (e) {
     if (e.message === 'Unsupported state or unable to authenticate data') {
       program.error('Incorrect database passphrase');
@@ -280,7 +268,7 @@ async function programDecrypt(/** @type {import('@astrobase/core').File} */ file
   }
 }
 
-function programEncrypt(/** @type {object} */ obj) {
+async function programEncrypt(/** @type {object} */ obj) {
   if (
     !passphrase &&
     (passphrase = prompt('Choose a database passphrase')) !== prompt('Confirm database passphrase')
@@ -288,7 +276,7 @@ function programEncrypt(/** @type {object} */ obj) {
     program.error('Database passphrase did not match');
   }
 
-  return encrypt(obj, passphrase);
+  return new File().setPayload(await encrypt(obj, passphrase));
 }
 
 /**
