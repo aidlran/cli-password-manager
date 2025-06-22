@@ -11,7 +11,7 @@
   ],
   "dependencies": {
     "better-sqlite3": "^11.9.1",
-    "commander": "^13.1.0",
+    "commander": "^14.0.0",
     "env-paths": "3.0.0",
     "readline-sync": "1.4.10"
   },

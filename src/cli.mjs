@@ -1,28 +1,13 @@
 #!/usr/bin/env node
 
-// prettier-ignore
-import { decodeWithCodec, deleteContent, File, getContent, putImmutable, putMutable } from '@astrobase/core';
-import { clients } from '@astrobase/core/rpc/client';
-import sqlite from '@astrobase/core/sqlite';
 import { Command } from 'commander';
 import paths from 'env-paths';
 import { existsSync, mkdirSync, renameSync } from 'fs';
 import { join } from 'path';
 import pkg from '../package.json' with { type: 'json' };
-import { decrypt, encrypt } from './lib/crypt.mjs';
-import { getIndex } from './lib/legacy/index-file.mjs';
+import { getEntryProps, getIndex, renameEntry, saveEntry } from './lib/content.mjs';
+import { init } from './lib/init.mjs';
 import { prompt } from './lib/readline.mjs';
-
-/**
- * @typedef Entry
- * @property {import('@astrobase/core').ContentIdentifier} [prev]
- * @property {Record<string, string>} props
- */
-
-/** @type {import('./lib/legacy/index-file.mjs').Index} */
-let index;
-/** @type {string} */
-let passphrase;
 
 const { data: dataDir } = paths(pkg.name, { suffix: '' });
 mkdirSync(dataDir, { recursive: true });
@@ -88,60 +73,57 @@ program
   .option(...secretOption)
   .action(async (id, { property, secret }) => {
     promptSecrets((property ??= {}), secret);
-
-    initAstrobase();
-
-    await assertEntryExists(id, false);
-
-    await saveEntry(id, { props: property });
+    const instance = await initInstance();
+    await assertEntryExists(instance, id, false);
+    await saveEntry(instance, id, property);
   });
 
 program
   .command('delete <unique-id>')
   .description('Delete an entry')
   .action(async (id) => {
-    initAstrobase();
+    const instance = await initInstance();
 
-    await assertEntryExists(id);
+    await assertEntryExists(instance, id);
 
-    let cid = index[id].cid;
-    delete index[id];
+    // TODO: move to lib function
+    throw new Error('Not implemented');
 
-    const promises = [saveIndex()];
+    // let cid = index[id].cid;
+    // delete index[id];
 
-    while (cid) {
-      const file = await getContent(cid);
+    // const promises = [saveIndex()];
 
-      if (!file) {
-        break;
-      }
+    // while (cid) {
+    //   const file = await legacyGetContent(cid);
 
-      promises.push(deleteContent(cid));
+    //   if (!file) {
+    //     break;
+    //   }
 
-      // @ts-ignore
-      cid = (await programDecrypt(file)).prev;
-    }
+    //   promises.push(legacyDeleteContent(cid));
 
-    await Promise.all(promises);
+    //   // @ts-ignore
+    //   cid = (await programDecrypt(file)).prev;
+    // }
+
+    // await Promise.all(promises);
   });
 
 program
   .command('get <unique-id>')
   .description('Retrieve an entry')
-  .action(async (id) => {
-    initAstrobase();
-    Object.entries(await getEntryProps(id)).forEach(([k, v]) =>
-      console.log(`${k.charAt(0).toUpperCase()}${k.slice(1)}:`, v),
-    );
-    console.log('Added:', index[id].added);
-  });
+  .action(async (id) =>
+    Object.entries(await getAssertedEntryProps(await initInstance(), id))
+      .sort(([a], [b]) => a.localeCompare(b))
+      .forEach(([k, v]) => console.log(`${k.charAt(0).toUpperCase()}${k.slice(1)}:`, v)),
+  );
 
 program
   .command('list [search]')
   .description('List entries')
   .action(async (search) => {
-    initAstrobase();
-    const keys = Object.keys(await programGetIndex());
+    const keys = Object.keys(await getIndex(await initInstance()));
     if (search) {
       search = search.trim().toLowerCase();
     }
@@ -154,15 +136,12 @@ program
   .command('rename <unique-id> <new-unique-id>')
   .description('Assign a new ID to an entry')
   .action(async (oldID, newID) => {
-    initAstrobase();
+    const instance = await initInstance();
 
-    await assertEntryExists(oldID);
-    await assertEntryExists(newID, false);
+    await assertEntryExists(instance, oldID);
+    await assertEntryExists(instance, newID, false);
 
-    index[newID] = index[oldID];
-    delete index[oldID];
-
-    await saveIndex();
+    await renameEntry(instance, oldID, newID);
   });
 
 program
@@ -174,9 +153,9 @@ program
   .option(...secretOption)
   .option('-d, --delete <keys-to-delete...>', 'specify keys to delete')
   .action(async (id, { delete: keysToDelete, property, secret }) => {
-    initAstrobase();
+    const instance = await initInstance();
 
-    const props = await getEntryProps(id);
+    const props = await getAssertedEntryProps(instance, id);
 
     if (keysToDelete) {
       for (const key of keysToDelete) {
@@ -186,83 +165,34 @@ program
 
     promptSecrets(props, secret);
 
-    (property ??= {}).updated ??= now;
+    (property ??= {}).updated ??= new Date().toISOString();
 
     Object.assign(props, property);
 
-    await saveEntry(id, { prev: index[id]?.cid, props });
+    await saveEntry(instance, id, props);
   });
 
-const now = new Date().toISOString();
+const initInstance = () => init(program.getOptionValue('db'));
 
-function initAstrobase() {
-  const { data } = paths(pkg.name, { suffix: '' });
-  mkdirSync(data, { recursive: true });
-  clients.add({ strategy: sqlite({ filename: program.getOptionValue('db') }) });
-}
-
-const programGetIndex = async () =>
-  (index ??= await getIndex((passphrase ??= prompt('Enter database passphrase')), () =>
-    program.error('Incorrect database passphrase'),
-  ));
-
-async function saveIndex() {
-  await putMutable(pkg.name, await programEncrypt(await programGetIndex()));
-}
-
-/** @param {string} id */
-async function assertEntryExists(id, bool = true) {
-  if (!(await programGetIndex())[id] == bool) {
+/**
+ * @param {import('@astrobase/sdk/instance').Instance} instance
+ * @param {string} id
+ * @param {boolean} [bool] `true` = it must exist. `false` = it must not exist.
+ */
+async function assertEntryExists(instance, id, bool = true) {
+  if (!(await getIndex(instance))[id] == bool) {
     program.error(`Entry '${id}' ${bool ? 'does not exist' : 'already exists'}`);
   }
 }
 
 /**
+ * @param {import('@astrobase/sdk/instance').Instance} instance
  * @param {string} id
- * @returns {Promise<Entry['props']>}
+ * @returns {Promise<import('./lib/content.mjs').Entry['props']>}
  */
-async function getEntryProps(id) {
-  await assertEntryExists(id);
-
-  const file = await getContent(index[id].cid);
-
-  if (!file) {
-    return program.error(`Entry '${id}' not found`);
-  }
-
-  // @ts-ignore
-  return (await programDecrypt(file)).props;
-}
-
-/**
- * @param {string} id
- * @param {Entry} entry
- */
-async function saveEntry(id, entry) {
-  entry.props.updated ??= now;
-  const added = entry.props.added ?? index[id]?.added ?? now;
-  delete entry.props.added;
-  index[id] = { added, cid: await putImmutable(await programEncrypt(entry)) };
-  await saveIndex();
-}
-
-const programDecrypt = (/** @type {import('@astrobase/core').File} */ file) =>
-  decodeWithCodec(
-    decrypt(file.payload, (passphrase ??= prompt('Enter database passphrase')), () =>
-      program.error('Incorrect database passphrase'),
-    ),
-    'application/json',
-  );
-
-async function programEncrypt(/** @type {object} */ obj) {
-  if (
-    !passphrase &&
-    (passphrase = prompt('Choose a database passphrase')) !== prompt('Confirm database passphrase')
-  ) {
-    program.error('Database passphrase did not match');
-  }
-
-  return new File().setPayload(await encrypt(obj, passphrase));
+async function getAssertedEntryProps(instance, id) {
+  await assertEntryExists(instance, id);
+  return (await getEntryProps(instance, id)) ?? program.error(`Entry '${id}' not found`);
 }
 
 /**

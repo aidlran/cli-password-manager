@@ -8,8 +8,6 @@ const commonInstance = createInstance(Common);
 export function decrypt(
   /** @type {Uint8Array} */ buf,
   /** @type {import('crypto').BinaryLike} */ passphrase,
-  /** @type {() => unknown} */ onIncorrectPassphrase,
-  /** @type {import('@astrobase/sdk/instance').Instance} */ instance = commonInstance,
 ) {
   try {
     const iv = buf.slice(0, 12);
@@ -21,10 +19,8 @@ export function decrypt(
     decipher.setAuthTag(buf.slice(bufTagStart));
     return Buffer.concat([decipher.update(payload), decipher.final()]);
   } catch (e) {
-    if (e.message === 'Unsupported state or unable to authenticate data') {
-      onIncorrectPassphrase();
-    }
-    throw e;
+    console.error('Unable to decrypt');
+    process.exit(1);
   }
 }
 
