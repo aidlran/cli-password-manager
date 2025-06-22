@@ -13,8 +13,8 @@ git clone https://github.com/aidlran/cli-password-manager
 cd cli-password-manager
 git submodule update --init
 npm ci
-node cli.js help
+node src/cli.js help
 ```
 
 > [!NOTE]
-> Application data is encrypted and stored in your user application data directory. On Linux, this is `~/.local/share/luna-pass`.
+> Data is encrypted and stored as a SQLite database file in your user app data directory. Use the `help` command to see the default location for your platform.
