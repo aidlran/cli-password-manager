@@ -1,5 +1,5 @@
 import { decodeWithCodec } from '@astrobase/sdk/codecs';
-import { getContent } from '@astrobase/sdk/content';
+import { deleteContent, getContent } from '@astrobase/sdk/content';
 import { FileBuilder } from '@astrobase/sdk/file';
 import { getIdentity, getNextIdentity, getPrivateKey, putIdentity } from '@astrobase/sdk/identity';
 import { putImmutable } from '@astrobase/sdk/immutable';
@@ -166,4 +166,36 @@ export async function renameEntry(instance, oldID, newID) {
   index[newID] = index[oldID];
   delete index[oldID];
   await saveIndex(instance);
+}
+
+/**
+ * Deletes an entry in the index and cleans up entry history.
+ *
+ * @param {import('@astrobase/sdk/instance').Instance} instance
+ * @param {string} id
+ */
+export async function deleteEntry(instance, id) {
+  const index = await getIndex(instance);
+
+  let cid = index[id]?.cid;
+
+  delete index[id];
+
+  /** @type {Promise<unknown>[]} */
+  const promises = [saveIndex(instance)];
+
+  while (cid) {
+    /** @type {Entry} */
+    // @ts-ignore
+    const entry = await get(instance, cid);
+    promises.push(deleteContent(cid, instance));
+
+    if (!entry) {
+      break;
+    }
+
+    cid = entry.prev;
+  }
+
+  await Promise.all(promises);
 }

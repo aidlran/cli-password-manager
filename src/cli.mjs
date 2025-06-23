@@ -5,7 +5,7 @@ import paths from 'env-paths';
 import { existsSync, mkdirSync, renameSync } from 'fs';
 import { join } from 'path';
 import pkg from '../package.json' with { type: 'json' };
-import { getEntryProps, getIndex, renameEntry, saveEntry } from './lib/content.mjs';
+import { deleteEntry, getEntryProps, getIndex, renameEntry, saveEntry } from './lib/content.mjs';
 import { init } from './lib/init.mjs';
 import { prompt } from './lib/readline.mjs';
 
@@ -83,31 +83,8 @@ program
   .description('Delete an entry')
   .action(async (id) => {
     const instance = await initInstance();
-
     await assertEntryExists(instance, id);
-
-    // TODO: move to lib function
-    throw new Error('Not implemented');
-
-    // let cid = index[id].cid;
-    // delete index[id];
-
-    // const promises = [saveIndex()];
-
-    // while (cid) {
-    //   const file = await legacyGetContent(cid);
-
-    //   if (!file) {
-    //     break;
-    //   }
-
-    //   promises.push(legacyDeleteContent(cid));
-
-    //   // @ts-ignore
-    //   cid = (await programDecrypt(file)).prev;
-    // }
-
-    // await Promise.all(promises);
+    await deleteEntry(instance, id);
   });
 
 program
