@@ -5,7 +5,8 @@ import { createInstance } from '@astrobase/sdk/instance';
 import { createKeyring, loadKeyring } from '@astrobase/sdk/keyrings';
 import { randomBytes } from 'crypto';
 import { expect, test } from 'vitest';
-import { deleteEntry, get, getEntry, getIndex, put, saveEntry, saveIndex } from './content.mjs';
+// prettier-ignore
+import { deleteEntry, get, getEntry, getIndex, put, renameEntry, saveEntry, saveIndex } from './content.mjs';
 
 const randText = (length = 8) => randomBytes(length).toString('base64');
 
@@ -26,37 +27,48 @@ test('Put & get', async () => {
   await expect(get(instance, cid)).resolves.toStrictEqual(content);
 });
 
-test('saveEntry, getEntry & deleteEntry', async () => {
+test('saveEntry, getEntry, renameEntry & deleteEntry', async () => {
   await saveIndex(instance, {});
 
-  const entryID = randText();
+  const firstEntryID = randText();
 
   /** @type {import('./content.mjs').Entry} */
   let props = {
     [randText()]: randText(),
   };
 
-  await expect(getEntry(instance, entryID)).resolves.toBe(null);
+  await expect(getEntry(instance, firstEntryID)).resolves.toBe(null);
 
-  await saveEntry(instance, entryID, props);
+  await saveEntry(instance, firstEntryID, props);
 
-  await expect(getEntry(instance, entryID)).resolves.toStrictEqual({ props });
+  await expect(getEntry(instance, firstEntryID)).resolves.toStrictEqual({ props });
 
-  let prev = (await getIndex())[entryID].cid;
+  let prev = (await getIndex())[firstEntryID].cid;
 
   props = {
     [randText()]: randText(),
     [randText()]: randText(),
   };
 
-  await saveEntry(instance, entryID, props);
+  await saveEntry(instance, firstEntryID, props);
 
-  const retrievedEntry = await getEntry(instance, entryID);
+  let retrievedEntry = await getEntry(instance, firstEntryID);
 
   expect(retrievedEntry.prev.toString()).toBe(prev.toString());
   expect(retrievedEntry.props).toStrictEqual(props);
 
-  await deleteEntry(instance, entryID);
+  // Will be renamed
+  const secondEntryID = firstEntryID + 'different';
 
-  await expect(getEntry(instance, entryID)).resolves.toBe(null);
+  // Rename test
+  await renameEntry(instance, firstEntryID, secondEntryID);
+  await expect(getEntry(instance, firstEntryID)).resolves.toBe(null);
+  retrievedEntry = await getEntry(instance, secondEntryID);
+  expect(retrievedEntry.prev.toString()).toBe(prev.toString());
+  expect(retrievedEntry.props).toStrictEqual(props);
+
+  // Delete test
+  await deleteEntry(instance, secondEntryID);
+  await expect(getEntry(instance, firstEntryID)).resolves.toBe(null);
+  await expect(getEntry(instance, secondEntryID)).resolves.toBe(null);
 });
