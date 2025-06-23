@@ -32,28 +32,27 @@ test('saveEntry, getEntry, renameEntry & deleteEntry', async () => {
 
   const firstEntryID = randText();
 
+  // Non exist get test
+  await expect(getEntry(instance, firstEntryID)).resolves.toBe(null);
+
+  // Save new test
   /** @type {import('./content.mjs').Entry} */
   let props = {
     [randText()]: randText(),
   };
-
-  await expect(getEntry(instance, firstEntryID)).resolves.toBe(null);
-
   await saveEntry(instance, firstEntryID, props);
-
   await expect(getEntry(instance, firstEntryID)).resolves.toStrictEqual({ props });
 
+  // Save update test
   let prev = (await getIndex())[firstEntryID].cid;
-
   props = {
     [randText()]: randText(),
     [randText()]: randText(),
   };
-
   await saveEntry(instance, firstEntryID, props);
 
+  // Get after update
   let retrievedEntry = await getEntry(instance, firstEntryID);
-
   expect(retrievedEntry.prev.toString()).toBe(prev.toString());
   expect(retrievedEntry.props).toStrictEqual(props);
 
