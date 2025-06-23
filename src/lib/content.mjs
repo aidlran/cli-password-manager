@@ -139,13 +139,14 @@ export const saveIndex = async (instance, newIndex) =>
  * @param {Entry['props']} props
  */
 export async function saveEntry(instance, id, props) {
+  const index = await getIndex(instance);
   const now = new Date().toISOString();
   props.updated ??= now;
   const added = props.added ?? index[id]?.added ?? now;
   delete props.added;
   index[id] = {
     added,
-    cid: await put(instance, { prev: (await getEntry(instance, id))?.prev, props }),
+    cid: await put(instance, { prev: index[id]?.cid, props }),
   };
   await saveIndex(instance);
 }
