@@ -1,4 +1,4 @@
-import wordlist from '@astrobase/sdk/bip39/wordlist/english' with { type: 'json' };
+import wordlist from '@astrobase/sdk/bip39/wordlist/english';
 import { createKeyring as create, loadKeyring as load } from '@astrobase/sdk/keyrings';
 import { getPassphrase } from './passphrase.mjs';
 
