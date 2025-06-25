@@ -1,6 +1,6 @@
 {
   "name": "luna-pass",
-  "version": "2.0.0-rc.7",
+  "version": "2.0.0-rc.8",
   "private": true,
   "description": "A secure password and secrets management CLI utility using Astrobase",
   "type": "module",
@@ -18,7 +18,10 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@bitcoinerlab/secp256k1": "^1.0.0",
+    "@noble/secp256k1": "^2.0.0",
     "better-sqlite3": "^11.9.1",
+    "bip32": "^5.0.0-rc.0",
     "commander": "^14.0.0",
     "env-paths": "3.0.0",
     "readline-sync": "1.4.10"

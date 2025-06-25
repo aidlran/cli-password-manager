@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.0.0-rc.8](https://github.com/aidlran/cli-password-manager/releases/tag/v2.0.0-rc.7) - 2025-06-25
+
+- Added missing peer dependencies.
+
 ## [2.0.0-rc.7](https://github.com/aidlran/cli-password-manager/releases/tag/v2.0.0-rc.7) - 2025-06-24
 
 - Added `--db` option.
