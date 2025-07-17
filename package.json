@@ -1,6 +1,6 @@
 {
   "name": "luna-pass",
-  "version": "2.0.0-rc.8",
+  "version": "2.1.0",
   "private": true,
   "description": "A secure password and secrets management CLI utility using Astrobase",
   "type": "module",

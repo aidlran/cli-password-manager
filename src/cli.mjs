@@ -1,11 +1,16 @@
 #!/usr/bin/env node
 
+import { getIdentity, putIdentity } from '@astrobase/sdk/identity';
+import { spawnSync } from 'child_process';
 import { Command } from 'commander';
+import { randomUUID } from 'crypto';
 import paths from 'env-paths';
-import { existsSync, mkdirSync, renameSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
 import { join } from 'path';
 import pkg from '../package.json' with { type: 'json' };
-import { deleteEntry, getEntryProps, getIndex, renameEntry, saveEntry } from './lib/content.mjs';
+// prettier-ignore
+import { deleteEntry, get, getEntryProps, getIndex, put, renameEntry, saveEntry } from './lib/content.mjs';
 import { init } from './lib/init.mjs';
 import { prompt } from './lib/readline.mjs';
 
@@ -147,6 +152,74 @@ program
     Object.assign(props, property);
 
     await saveEntry(instance, id, props);
+  });
+
+program
+  .command('note')
+  .description('Edit the note')
+  .action(async () => {
+    const instance = await initInstance();
+
+    const id = `${pkg.name}-note`;
+
+    /** @type {Uint8Array} */
+    let note;
+
+    try {
+      // @ts-ignore
+      note = await get(
+        instance,
+        (await getIdentity({ id, instance })).identity.ref,
+        'application/octet-stream',
+      );
+    } catch (e) {
+      if (e instanceof RangeError && e.message.includes('Identity not found')) {
+        note = new Uint8Array();
+      } else {
+        console.error(e);
+        process.exit(1);
+      }
+    }
+
+    const tempFilePath = join(tmpdir(), randomUUID());
+
+    writeFileSync(tempFilePath, note, { mode: 0o600 });
+
+    const editResult = spawnSync(process.env.EDITOR || 'vim', [tempFilePath], { stdio: 'inherit' });
+
+    if (editResult.error) {
+      console.error(editResult.error);
+      process.exit(1);
+    }
+
+    const newNote = readFileSync(tempFilePath);
+
+    if (newNote.compare(note) == 0) {
+      console.log('No change');
+    } else {
+      await putIdentity({
+        id,
+        instance,
+        ref: await put(instance, newNote, 'application/octet-stream'),
+      });
+      console.log('Note saved');
+    }
+
+    function shredFallback() {
+      console.warn('Shred failed; using fallback');
+      const overwriteBuffer = Buffer.alloc(newNote.length, 0);
+      writeFileSync(tempFilePath, overwriteBuffer);
+      unlinkSync(tempFilePath);
+    }
+
+    try {
+      const shred = spawnSync('shred', ['--remove', '--zero', '--iterations=3', tempFilePath]);
+      if (shred.status != 0) {
+        shredFallback();
+      }
+    } catch {
+      shredFallback();
+    }
   });
 
 const initInstance = () => init(program.getOptionValue('db'));

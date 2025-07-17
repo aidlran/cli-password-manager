@@ -58,18 +58,15 @@ const getPrivKey = async (instance) =>
 /**
  * @param {import('@astrobase/sdk/instance').Instance} instance
  * @param {import('@astrobase/sdk/cid').ContentIdentifierLike} cid
- * @returns {Promise<Index | Entry | null>}
+ * @param {import('@astrobase/sdk/media-types').MediaTypeLike} mediaType
+ * @returns {Promise<Index | Entry | Uint8Array | null>}
  */
-export async function get(instance, cid) {
+export async function get(instance, cid, mediaType = 'application/json') {
   /** @type {FileBuilder<Index | Entry>} */
   const content = await getContent(cid, instance);
-  // @ts-ignore
   return content
-    ? decodeWithCodec(
-        instance,
-        decrypt(content.payload, await getPrivKey(instance)),
-        'application/json',
-      )
+    ? // @ts-ignore
+      decodeWithCodec(instance, decrypt(content.payload, await getPrivKey(instance)), mediaType)
     : null;
 }
 
@@ -114,11 +111,14 @@ export async function getEntryProps(instance, id) {
 /**
  * @param {import('@astrobase/sdk/instance').Instance} instance
  * @param {object} value
+ * @param {import('@astrobase/sdk/media-types').MediaTypeLike} [mediaType]
  * @returns {Promise<import('@astrobase/sdk/cid').ContentIdentifier>}
  */
-export const put = async (instance, value) =>
+export const put = async (instance, value, mediaType) =>
   putImmutable(
-    new FileBuilder().setPayload(await encrypt(value, await getPrivKey(instance), instance)),
+    new FileBuilder().setPayload(
+      await encrypt(value, await getPrivKey(instance), instance, mediaType),
+    ),
     { instance },
   );
 

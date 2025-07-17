@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.1.0](https://github.com/aidlran/cli-password-manager/releases/tag/v2.1.0) - 2025-07-17
+
+- Added `note` subcommand.
+
 ## [2.0.0-rc.8](https://github.com/aidlran/cli-password-manager/releases/tag/v2.0.0-rc.7) - 2025-06-25
 
 - Added missing peer dependencies.

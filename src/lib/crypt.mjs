@@ -28,11 +28,12 @@ export async function encrypt(
   /** @type {object} */ obj,
   /** @type {import('crypto').BinaryLike} */ passphrase,
   /** @type {import('@astrobase/sdk/instance').Instance} */ instance = commonInstance,
+  /** @type {import('@astrobase/sdk/media-types').MediaTypeLike} */ mediaType = 'application/json',
 ) {
   const iv = randomBytes(12);
   const salt = randomBytes(16);
   const key = pbkdf2Sync(passphrase, salt, 10000, 32, 'sha512');
-  const payload = await encodeWithCodec(instance, obj, 'application/json');
+  const payload = await encodeWithCodec(instance, obj, mediaType);
   const cipher = createCipheriv('chacha20-poly1305', key, iv);
   return Buffer.concat([iv, salt, cipher.update(payload), cipher.final(), cipher.getAuthTag()]);
 }
